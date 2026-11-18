@@ -1,0 +1,166 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  MANAGER
+  MASTER
+}
+
+enum DealStage {
+  NEW
+  ESTIMATE_SENT
+  SCHEDULED
+  IN_PROGRESS
+  READY
+  COMPLETED
+  CANCELED
+}
+
+model User {
+  id           String        @id @default(cuid())
+  name         String
+  login        String        @unique
+  passwordHash String
+  role         Role
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+
+  managedDeals Deal[]        @relation("DealManager")
+  masterDeals  Deal[]        @relation("DealMaster")
+  tasks        Task[]
+  logs         ActivityLog[]
+}
+
+model Client {
+  id         String    @id @default(cuid())
+  name       String
+  phone      String    @unique
+  source     String    @default("Прямое обращение")
+  notes      String?
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  cars       Car[]
+  deals      Deal[]
+
+  @@index([archivedAt])
+}
+
+model Car {
+  id          String   @id @default(cuid())
+  clientId    String
+  brandModel  String
+  plateNumber String
+  color       String?
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  client      Client   @relation(fields: [clientId], references: [id])
+  deals       Deal[]
+
+  @@index([clientId])
+  @@index([plateNumber])
+}
+
+model Box {
+  id       String  @id @default(cuid())
+  number   Int     @unique
+  name     String
+  isActive Boolean @default(true)
+
+  deals    Deal[]
+}
+
+model Service {
+  id            String        @id @default(cuid())
+  name          String
+  basePrice     Int
+  durationHours Int
+  isActive      Boolean       @default(true)
+
+  dealServices  DealService[]
+}
+
+model Deal {
+  id           String        @id @default(cuid())
+  title        String
+  clientId     String
+  carId        String?
+  managerId    String?
+  masterId     String?
+  boxId        String?
+  stage        DealStage     @default(NEW)
+  startAt      DateTime?
+  endAt        DateTime?
+  totalAmount  Int           @default(0)
+  cancelReason String?
+  notes        String?
+  archivedAt   DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  closedAt     DateTime?
+
+  client       Client        @relation(fields: [clientId], references: [id])
+  car          Car?          @relation(fields: [carId], references: [id])
+  manager      User?         @relation("DealManager", fields: [managerId], references: [id])
+  master       User?         @relation("DealMaster", fields: [masterId], references: [id])
+  box          Box?          @relation(fields: [boxId], references: [id])
+  services     DealService[]
+  tasks        Task[]
+  logs         ActivityLog[]
+
+  @@index([stage, archivedAt])
+  @@index([boxId, startAt, endAt])
+  @@index([masterId, startAt])
+}
+
+model DealService {
+  id                  String  @id @default(cuid())
+  dealId              String
+  serviceId           String
+  serviceNameSnapshot String
+  priceAtOrder        Int
+
+  deal                Deal    @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  service             Service @relation(fields: [serviceId], references: [id])
+
+  @@index([dealId])
+}
+
+model Task {
+  id          String    @id @default(cuid())
+  dealId      String
+  assigneeId  String
+  title       String
+  dueAt       DateTime
+  isCompleted Boolean   @default(false)
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  deal        Deal      @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  assignee    User      @relation(fields: [assigneeId], references: [id])
+
+  @@index([dealId, isCompleted])
+  @@index([assigneeId, isCompleted, dueAt])
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  dealId    String
+  userId    String?
+  action    String
+  details   String
+  createdAt DateTime @default(now())
+
+  deal      Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@index([dealId, createdAt])
+}
